@@ -1,0 +1,1 @@
+LD_PRELOAD=`pwd`/libusurp.so.1.0 ./test-connect 10.0.8.76 12345
