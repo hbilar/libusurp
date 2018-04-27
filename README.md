@@ -1,7 +1,7 @@
 
 ## libusurp
 
-This is a little proof of concept work to 'usurp' system calls for shared library linked binaries using `LD\_PRELOAD`.
+This is a little proof of concept work to 'usurp' system calls for shared library linked binaries using `LD_PRELOAD`.
 
 E.g. the `connect()` library call can be controlled and either allowed/denied through a configuration file (IPV4 TCP only, at present). This might be useful in e.g. a test/dev environment setting, where you don't want to risk accidentally connecting to e.g. a production database.
 
@@ -13,7 +13,7 @@ Also note that no root permissions are required for this, i.e. it's perfectly pl
 
 ## Caveats
 
-The `LD\_PRELOAD` method only works for non-statically linked binaries.
+The `LD_PRELOAD` method only works for non-statically linked binaries.
 
 
 ## Building
