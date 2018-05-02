@@ -13,6 +13,10 @@
 #define RULE_ENV_NAME "USURP_FW_CFG"
 #define DEFAULT_RULE_FILE "./usurp-fw.conf"
 
+int __libusurp_debug_level = 0;
+
+#define debug(lev, ...) { if (getenv("LIBUSURP_DEBUG")) { __libusurp_debug_level=atoi(getenv("LIBUSURP_DEBUG")); } if (__libusurp_debug_level >= lev) printf(__VA_ARGS__); }
+
 #define streq(s1, s2)  (strcmp(s1, s2) == 0)
 #define strbegins(s1, s2) (strcasestr(s1, s2) == s1)
 
@@ -73,7 +77,7 @@ unsigned long int __libno_str_to_ip(char *s)
     while (*s && (*s != '.')) {
         *(p++) = *(s++);
     }
-    ip = atoi(buf) << 24;  /* save octet */
+    ip = (unsigned long int)atoi(buf) << 24;  /* save octet */
 
     /* stupid error checking */
     if (! (*s))
@@ -86,7 +90,7 @@ unsigned long int __libno_str_to_ip(char *s)
     while (*s && (*s != '.')) {
         *(p++) = *(s++);
     }
-    ip += atoi(buf) << 16;  /* save octet */
+    ip += (unsigned long int)atoi(buf) << 16;  /* save octet */
 
     /* stupid error checking */
     if (! (*s))
@@ -99,7 +103,7 @@ unsigned long int __libno_str_to_ip(char *s)
     while (*s && (*s != '.')) {
         *(p++) = *(s++);
     }
-    ip += atoi(buf) << 8;  /* save octet */
+    ip += (unsigned long int)atoi(buf) << 8;  /* save octet */
 
     /* stupid error checking */
     if (! (*s))
@@ -107,7 +111,7 @@ unsigned long int __libno_str_to_ip(char *s)
     
     /* fourth octet */
     s++;
-    ip += atoi(s);  /* save octet */
+    ip += (unsigned long int)atoi(s);  /* save octet */
 
     return ip;
 }
@@ -116,7 +120,7 @@ unsigned long int __libno_str_to_ip(char *s)
 /* Build a bitmask of c 1s followed by 32 - c 0s (i.e. a netmask) */
 unsigned long int __libno_netmask_of_length(short int c)
 {
-    return 0xffffffff << (32 - c);
+    return (0xffffffff << (32 - c)) & (0xffffffff);
 }
 
 
@@ -197,16 +201,15 @@ struct fw_rule *__libno_read_config()
 void __libno_dump_rules()
 {
     struct fw_rule *r = __libno_rules;
-    printf("Default policy: %d\n", __libno_default_policy_allow);
+    debug(1, "Default policy: %d\n", __libno_default_policy_allow);
     while (r) {
-        printf("  RULE:  allow=%d\n", r->allow);
-        printf("         dest_ip = %x\n", r->dest_ip);
-        printf("         netmask = %x\n", r->netmask);
-        printf("         ports = %d - %d\n", r->start_port, r->end_port);
+        debug(1, "  RULE:  allow=%d\n", r->allow);
+        debug(1, "         dest_ip = %lx\n", r->dest_ip);
+        debug(1, "         netmask = %lx\n", r->netmask);
+        debug(1, "         ports = %d - %d\n", r->start_port, r->end_port);
         
         r = r->next;
     }
-
 }
 
 
@@ -216,7 +219,7 @@ void __libno_build_rules()
     if (__libno_rules == NULL) {
         /* Only read __libno_rules once! */
         __libno_rules = __libno_read_config();
-        //dump___libno_rules();
+        __libno_dump_rules();
     }
 }
 
@@ -250,22 +253,27 @@ unsigned short __libno_run_rules(struct fw_rule *r, unsigned long int ip, unsign
 {
     struct fw_rule *cur_rule = r;
 
-    //printf("__libno_run_rules:  ip = %x,  port = %d\n", ip, port);
+    debug(2, "__libno_run_rules:  ip = %x,  port = %d, r = %x\n", ip, port, r);
 
     while (cur_rule) {
         /* check ip subnet */
 
+        debug(2, "  RULE:  allow=%d\n", cur_rule->allow);
+        debug(2, "         dest_ip = %x\n", cur_rule->dest_ip);
+        debug(2, "         netmask = %x\n", cur_rule->netmask);
+        debug(2, "         ports = %d - %d\n", cur_rule->start_port, cur_rule->end_port);
+
         if (__libno_is_in_subnet(ip, cur_rule->dest_ip, cur_rule->netmask)) {
-            //printf("ip %x is in subnet %x/%u\n", ip, cur_rule->dest_ip, cur_rule->netmask);
+            debug(3, "ip %x is in subnet %x/%u\n", ip, cur_rule->dest_ip, cur_rule->netmask);
             if ((cur_rule->start_port <= port) && (cur_rule->end_port >= port)) {    
-                //printf("port %d matches\n", port);
+                debug(3, "port %d matches. Returning %d\n", port, cur_rule->allow);
                 return cur_rule->allow;
             } 
         }
         cur_rule = cur_rule->next;
     }
     
-    //printf("Hit default policy: %d\n", __libno_default_policy_allow);
+    debug(2, "Hit default policy: %d\n", __libno_default_policy_allow);
     return __libno_default_policy_allow;
 }
 
@@ -278,7 +286,6 @@ int connect(int sockfd, const struct sockaddr *addr, socklen_t addrlen)
     int (*org_connect)(int, const struct sockaddr *, socklen_t);
     org_connect = dlsym(RTLD_NEXT, "connect"); 
 
-
     if (addr->sa_family == AF_INET) { 
         __libno_build_rules(); /* leaky leak - but only once */
 
@@ -286,19 +293,19 @@ int connect(int sockfd, const struct sockaddr *addr, socklen_t addrlen)
 
         unsigned long int remote_ip = htonl(sin->sin_addr.s_addr);
         unsigned short translated_port = htons(sin->sin_port);
-        //char *ip_string = __libno_ip_to_str(remote_ip);
-        //printf("translated_port = %d\n", translated_port);
-        //printf("Remote IP as a string: %s\n", ip_string);
-        //free(ip_string);
+        char *ip_string = __libno_ip_to_str(remote_ip);
+        debug(3, "translated_port = %d\n", translated_port);
+        debug(3, "Remote IP as a string: %s\n", ip_string);
+        free(ip_string);
 
-        //printf("   org_connect = %x\n", org_connect);
+        debug(4, "   org_connect = %x\n", org_connect);
 
         if (__libno_run_rules(__libno_rules, remote_ip, translated_port)) {
-            //printf("Allowing connection!\n");
+            debug(1, "Allowing connection!\n");
             return (*org_connect)(sockfd, addr, addrlen);
         } 
         else {
-            //printf("*** DENIED ***\n");
+            debug(1, "*** DENIED ***\n");
             errno = EACCES;
             return -1;
         }
