@@ -4,10 +4,15 @@ set -e
 set -x
 
 # build library
-gcc -fPIC -c connect.c 
-gcc -fPIC -c execve.c 
-gcc -fPIC -c stats.c 
-gcc -shared -Wl,-soname,libusurp.so.1 -ldl -o libusurp.so.1.0 connect.o execve.o stats.o
+
+FILES="connect execve stats open"
+O_STR=
+for i in $FILES; do
+	gcc -fPIC -c $i.c
+	O_STR="$O_STR $i.o"
+done
+
+gcc -shared -Wl,-soname,libusurp.so.1 -ldl -o libusurp.so.1.0 $O_STR
 
 
 # build test program
